@@ -17,14 +17,25 @@ public:
 	virtual void ShutdownModule() override;
 	
 	/** This function will be bound to Command (by default it will bring up plugin window) */
-	void PluginButtonClicked();
+	// void PluginButtonClicked();
+	
+	static FLLMEditorAutomationModule& Get()
+	{
+		return FModuleManager::LoadModuleChecked<FLLMEditorAutomationModule>("LLMEditorAutomation");
+	}
 	
 private:
 
-	void RegisterMenus();
+	// void RegisterMenus();
 
-	TSharedRef<class SDockTab> OnSpawnPluginTab(const class FSpawnTabArgs& SpawnTabArgs);
+	// TSharedRef<class SDockTab> OnSpawnPluginTab(const class FSpawnTabArgs& SpawnTabArgs);
+	TSharedRef<class SDockTab> SpawnChatTab(const class FSpawnTabArgs& SpawnTabArgs);
+
+	void RegisterTabSpawner();
+	void UnregisterTabSpawner();
 
 private:
-	TSharedPtr<class FUICommandList> PluginCommands;
-};
+	// TSharedPtr<class FUICommandList> PluginCommands;
+	static const FName ChatTabName;
+} ;
+
