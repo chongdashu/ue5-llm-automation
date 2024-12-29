@@ -1,0 +1,94 @@
+# Unreal Engine specific ignores
+Saved/
+Intermediate/
+DerivedDataCache/
+.vs/
+*.VC.db
+*.opensdf
+*.opendb
+*.sdf
+*.sln
+*.suo
+*.xcodeproj
+*.xcworkspace
+*.pdb
+*.vcxproj*
+
+# Unreal Engine Build
+Build/
+Binaries/
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+
+# VS Code specific
+.vscode/
+*.code-workspace
+
+# JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+*.dll.response
+*.modules
+
+# Visual Studio specific
+*.VC.opendb
+*.exp
+*.lib
+*.ilk
+*.log
+
+# macOS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+*.swp
+*~.nib
+xcuserdata/
+
+# Plugin specific ignores
+Plugins/LLMEditorAutomation/Intermediate/
+Plugins/LLMEditorAutomation/Binaries/
+Plugins/LLMEditorAutomation/DerivedDataCache/
+
+# Content automation temporary files
+Content/Automation/
+AutomationTool/
+
+# Generated documentation
+Documentation/Generated/
+
+# Log files
+Logs/
+*.log
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Package files
+*.pak
+*.exe
+*.dll
+*.dylib
+*.so
+
+# Cache files
+*.udd
+
+# Crash reports
+CrashReportClient/
+*.dmp
+
+# Hot reload
+*.uhtifytime
+
+# Additional plugin-specific patterns
+*.bak
+*.tmp
+*_BuiltData.uasset
