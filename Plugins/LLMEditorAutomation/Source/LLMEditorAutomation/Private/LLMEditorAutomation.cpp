@@ -112,16 +112,32 @@ TSharedRef<SDockTab> FLLMEditorAutomationModule::SpawnChatTab(const FSpawnTabArg
 
 void FLLMEditorAutomationModule::RegisterTabSpawner()
 {
-	// Create a new menu category for AI tools
-	const FName AIMenuName = TEXT("AI");
-	const FText AIDisplayName = LOCTEXT("AIMenu", "AI");
-	
+	// Register the tab spawner
 	FGlobalTabmanager::Get()->RegisterNomadTabSpawner(
 		ChatTabName,
 		FOnSpawnTab::CreateRaw(this, &FLLMEditorAutomationModule::SpawnChatTab))
 		.SetDisplayName(LOCTEXT("ChatTabTitle", "LLM Chat"))
 		.SetTooltipText(LOCTEXT("ChatTooltip", "Open the LLM Chat Window"))
-		.SetGroup(WorkspaceMenu::GetMenuStructure().GetDeveloperToolsMiscCategory());
+		.SetMenuType(ETabSpawnerMenuType::Enabled);
+
+	// Register AI menu
+	UToolMenu* Menu = UToolMenus::Get()->ExtendMenu("MainFrame.MainMenu.Window");
+	FToolMenuSection& Section = Menu->FindOrAddSection("AI");
+	Section.Label = LOCTEXT("AISection", "AI");
+    
+	// Add our tab to the AI section
+	Section.AddMenuEntry(
+		ChatTabName,
+		LOCTEXT("ChatTabTitle", "LLM Chat"),
+		LOCTEXT("ChatTooltip", "Open the LLM Chat Window"),
+		FSlateIcon(),
+		FUIAction(
+			FExecuteAction::CreateLambda([]()
+			{
+				FGlobalTabmanager::Get()->TryInvokeTab(FName(TEXT("LLMChat")));
+			})
+		)
+	);
 }
 
 // ADD: New function for tab unregistration
