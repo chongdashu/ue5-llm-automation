@@ -10,6 +10,7 @@
 // #include "ToolMenus.h"
 #include "WorkspaceMenuStructure.h"
 #include "WorkspaceMenuStructureModule.h"
+#include "UI/SLLMChatWidget.h"
 
 // static const FName LLMEditorAutomationTabName("LLMEditorAutomation");
 const FName FLLMEditorAutomationModule::ChatTabName(TEXT("LLMChat"));
@@ -67,17 +68,10 @@ TSharedRef<SDockTab> FLLMEditorAutomationModule::SpawnChatTab(const FSpawnTabArg
 	// 	);
 
 	return SNew(SDockTab)
-		.TabRole(ETabRole::NomadTab)
-		[
-			// Put your tab content here!
-			SNew(SBox)
-			.HAlign(HAlign_Center)
-			.VAlign(VAlign_Center)
-			[
-				SNew(STextBlock)
-				.Text(LOCTEXT("ChatPlaceholder", "LLM Chat Interface"))
-			]
-		];
+	   .TabRole(ETabRole::NomadTab)
+	   [
+		   SNew(SLLMChatWidget)
+	   ];
 }
 
 // void FLLMEditorAutomationModule::PluginButtonClicked()
