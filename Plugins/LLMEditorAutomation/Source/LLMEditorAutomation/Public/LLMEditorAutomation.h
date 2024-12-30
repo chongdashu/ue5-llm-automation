@@ -37,5 +37,6 @@ private:
 private:
 	// TSharedPtr<class FUICommandList> PluginCommands;
 	static const FName ChatTabName;
+	TSharedPtr<class ILLMService> LLMService;
 } ;
 

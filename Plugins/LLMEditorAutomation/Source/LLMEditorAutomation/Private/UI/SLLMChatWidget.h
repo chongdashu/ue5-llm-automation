@@ -26,7 +26,7 @@ private:
 	// UI Styles
 	const FSlateBrush* GetBackgroundBrush() const 
 	{ 
-		return FCoreStyle::Get().GetBrush("ChatMessage.Background"); 
+		return FCoreStyle::Get().GetBrush("WhiteBrush"); 
 	}
 	FSlateColor GetUserMessageColor() const { return FLinearColor(0.8f, 0.9f, 1.0f); }
 	FSlateColor GetAIMessageColor() const { return FLinearColor(0.9f, 0.9f, 0.9f); }
