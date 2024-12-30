@@ -44,6 +44,8 @@ public class LLMEditorAutomation : ModuleRules
 				"Slate",
 				"SlateCore",
 				// ... add private dependencies that you statically link with here ...	
+				"WorkspaceMenuStructure", 
+				"ApplicationCore"
 			}
 			);
 		
