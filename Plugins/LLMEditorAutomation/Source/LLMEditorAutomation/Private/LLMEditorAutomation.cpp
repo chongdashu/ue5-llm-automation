@@ -11,6 +11,7 @@
 #include "WorkspaceMenuStructure.h"
 #include "WorkspaceMenuStructureModule.h"
 #include "UI/SLLMChatWidget.h"
+#include "Services/LocalLLMService.h"
 
 // static const FName LLMEditorAutomationTabName("LLMEditorAutomation");
 const FName FLLMEditorAutomationModule::ChatTabName(TEXT("LLMChat"));
@@ -39,6 +40,9 @@ void FLLMEditorAutomationModule::StartupModule()
 	// 	.SetDisplayName(LOCTEXT("FLLMEditorAutomationTabTitle", "LLMEditorAutomation"))
 	// 	.SetMenuType(ETabSpawnerMenuType::Hidden);
 
+	LLMService = MakeShared<FLocalLLMService>();
+	LLMService->Initialize();
+
 	RegisterTabSpawner();
 }
 
@@ -57,6 +61,8 @@ void FLLMEditorAutomationModule::ShutdownModule()
 	//
 	// FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(LLMEditorAutomationTabName);
 	UnregisterTabSpawner();
+
+	LLMService.Reset();
 }
 
 TSharedRef<SDockTab> FLLMEditorAutomationModule::SpawnChatTab(const FSpawnTabArgs& SpawnTabArgs)
@@ -71,6 +77,7 @@ TSharedRef<SDockTab> FLLMEditorAutomationModule::SpawnChatTab(const FSpawnTabArg
 	   .TabRole(ETabRole::NomadTab)
 	   [
 		   SNew(SLLMChatWidget)
+		   .LLMService(LLMService)
 	   ];
 }
 
