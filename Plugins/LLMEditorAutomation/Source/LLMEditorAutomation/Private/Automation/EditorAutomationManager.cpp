@@ -13,6 +13,7 @@
 #include "Blueprint/AIBlueprintHelperLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "K2Node_VariableSet.h"
 
 FEditorAutomationManager* FEditorAutomationManager::Instance = nullptr;
 
@@ -39,7 +40,7 @@ void FEditorAutomationManager::ProcessLLMResponse(const FString& Response)
             UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
             if (EditorWorld)
             {
-                FVector SpawnLocation = FVector(0, 0, 100); // Slightly above ground
+                FVector SpawnLocation = FVector(1640.0f, 1140.0f, 100.0f); // Target position
                 FRotator SpawnRotation = FRotator::ZeroRotator;
                 FActorSpawnParameters SpawnParams;
                 SpawnParams.SpawnCollisionHandlingOverride = 
@@ -109,6 +110,8 @@ void FEditorAutomationManager::SetupNPCMovementComponent(UBlueprint* Blueprint)
         MovementComp->bOrientRotationToMovement = true;
         MovementComp->RotationRate = FRotator(0.0f, 540.0f, 0.0f);
     }
+
+    
 }
 
 void FEditorAutomationManager::CreateVariables(UBlueprint* Blueprint)
@@ -147,24 +150,13 @@ void FEditorAutomationManager::CreateVariables(UBlueprint* Blueprint)
 
 void FEditorAutomationManager::CreateEventGraph(UBlueprint* Blueprint)
 {
-    if (!Blueprint)
-    {
-        return;
-    }
+    if (!Blueprint) return;
 
     UEdGraph* EventGraph = FBlueprintEditorUtils::FindEventGraph(Blueprint);
-    if (!EventGraph)
-    {
-        return;
-    }
+    if (!EventGraph) return;
 
-    // Create BeginPlay event - Fix first occurrence
-    UK2Node_Event* BeginPlayNode = FBlueprintEditorUtils::FindOverrideForFunction(
-        Blueprint,
-        AActor::StaticClass(),  // Changed from UGameplayStatics to AActor
-        FName(TEXT("ReceiveBeginPlay"))  // Changed to FName
-    );
-    
+    // Create BeginPlay event
+    UK2Node_Event* BeginPlayNode = FBlueprintEditorUtils::FindOverrideForFunction(Blueprint, AActor::StaticClass(), FName(TEXT("ReceiveBeginPlay")));
     if (!BeginPlayNode)
     {
         BeginPlayNode = NewObject<UK2Node_Event>(EventGraph);
@@ -172,22 +164,51 @@ void FEditorAutomationManager::CreateEventGraph(UBlueprint* Blueprint)
         BeginPlayNode->NodePosX = 0;
         BeginPlayNode->NodePosY = 0;
         EventGraph->AddNode(BeginPlayNode);
+        BeginPlayNode->AllocateDefaultPins();
     }
 
-    // Create Tick event - Fix second occurrence
-    UK2Node_Event* TickNode = FBlueprintEditorUtils::FindOverrideForFunction(
-        Blueprint,
-        AActor::StaticClass(),  // Changed from UGameplayStatics to AActor
-        FName(TEXT("ReceiveTick"))  // Changed to FName
-    );
-    
-    if (!TickNode)
+    // Create GetPlayerCharacter node
+    UK2Node_CallFunction* GetPlayerNode = NewObject<UK2Node_CallFunction>(EventGraph);
+    UFunction* GetPlayerFunc = UGameplayStatics::StaticClass()->FindFunctionByName(TEXT("GetPlayerCharacter"));
+    if (GetPlayerFunc)
     {
-        TickNode = NewObject<UK2Node_Event>(EventGraph);
-        TickNode->EventReference.SetExternalMember(TEXT("ReceiveTick"), ACharacter::StaticClass());
-        TickNode->NodePosX = 0;
-        TickNode->NodePosY = 200;
-        EventGraph->AddNode(TickNode);
+        GetPlayerNode->SetFromFunction(GetPlayerFunc);
+        GetPlayerNode->NodePosX = BeginPlayNode->NodePosX + 250;
+        GetPlayerNode->NodePosY = BeginPlayNode->NodePosY;
+        EventGraph->AddNode(GetPlayerNode);
+        GetPlayerNode->AllocateDefaultPins();
+
+        // Set the PlayerIndex pin to 0
+        if (UEdGraphPin* PlayerIndexPin = GetPlayerNode->FindPin(TEXT("PlayerIndex")))
+        {
+            PlayerIndexPin->DefaultValue = TEXT("0");
+        }
+    }
+
+    // Create Set TargetActor node
+    UK2Node_VariableSet* SetTargetNode = NewObject<UK2Node_VariableSet>(EventGraph);
+    SetTargetNode->VariableReference.SetSelfMember(TEXT("TargetActor"));
+    SetTargetNode->NodePosX = GetPlayerNode->NodePosX + 250;
+    SetTargetNode->NodePosY = GetPlayerNode->NodePosY;
+    EventGraph->AddNode(SetTargetNode);
+    SetTargetNode->AllocateDefaultPins();
+
+    // Connect execution pins
+    if (UEdGraphPin* BeginPlayThenPin = BeginPlayNode->FindPin(UEdGraphSchema_K2::PN_Then))
+    {
+        if (UEdGraphPin* SetTargetExecPin = SetTargetNode->FindPin(UEdGraphSchema_K2::PN_Execute))
+        {
+            BeginPlayThenPin->MakeLinkTo(SetTargetExecPin);
+        }
+    }
+
+    // Connect GetPlayerCharacter to Set TargetActor
+    if (UEdGraphPin* PlayerPin = GetPlayerNode->FindPin(TEXT("ReturnValue")))
+    {
+        if (UEdGraphPin* TargetPin = SetTargetNode->FindPin(TEXT("TargetActor")))
+        {
+            PlayerPin->MakeLinkTo(TargetPin);
+        }
     }
 
     ImplementFollowLogic(Blueprint);
@@ -207,25 +228,44 @@ void FEditorAutomationManager::ImplementFollowLogic(UBlueprint* Blueprint)
         TickNode = NewObject<UK2Node_Event>(EventGraph);
         TickNode->EventReference.SetExternalMember(TEXT("ReceiveTick"), ACharacter::StaticClass());
         TickNode->NodePosX = 0;
-        TickNode->NodePosY = 200;
+        TickNode->NodePosY = 0;
         EventGraph->AddNode(TickNode);
+        TickNode->AllocateDefaultPins();
     }
 
-    // Get TargetActor variable
+    // Create SimpleMoveToActor node
+    UK2Node_CallFunction* MoveToNode = NewObject<UK2Node_CallFunction>(EventGraph);
+    UFunction* SimpleMoveToFunc = UAIBlueprintHelperLibrary::StaticClass()->FindFunctionByName(TEXT("SimpleMoveToActor"));
+    if (SimpleMoveToFunc)
+    {
+        MoveToNode->SetFromFunction(SimpleMoveToFunc);
+        MoveToNode->NodePosX = TickNode->NodePosX + 300;
+        MoveToNode->NodePosY = TickNode->NodePosY;
+        EventGraph->AddNode(MoveToNode);
+        MoveToNode->AllocateDefaultPins();
+    }
+    
+    // Create Get Controller node
+    UK2Node_CallFunction* GetControllerNode = NewObject<UK2Node_CallFunction>(EventGraph);
+    UFunction* GetControllerFunc = APawn::StaticClass()->FindFunctionByName(TEXT("GetController"));
+    if (GetControllerFunc)
+    {
+        GetControllerNode->SetFromFunction(GetControllerFunc);
+        GetControllerNode->NodePosX = 200;
+        GetControllerNode->NodePosY = 200;
+        EventGraph->AddNode(GetControllerNode);
+        GetControllerNode->AllocateDefaultPins();
+    }
+
+    // Create Get TargetActor variable node
     UK2Node_VariableGet* GetTargetNode = NewObject<UK2Node_VariableGet>(EventGraph);
     GetTargetNode->VariableReference.SetSelfMember(TEXT("TargetActor"));
-    GetTargetNode->NodePosX = TickNode->NodePosX + 250;
-    GetTargetNode->NodePosY = TickNode->NodePosY;
+    GetTargetNode->NodePosX = MoveToNode->NodePosX - 150;
+    GetTargetNode->NodePosY = MoveToNode->NodePosY + 50;
     EventGraph->AddNode(GetTargetNode);
+    GetTargetNode->AllocateDefaultPins();
 
-    // Create AI Move To node
-    UK2Node_CallFunction* MoveToNode = NewObject<UK2Node_CallFunction>(EventGraph);
-    MoveToNode->FunctionReference.SetExternalMember(TEXT("SimpleMoveToActor"), UAIBlueprintHelperLibrary::StaticClass());
-    MoveToNode->NodePosX = GetTargetNode->NodePosX + 250;
-    MoveToNode->NodePosY = GetTargetNode->NodePosY;
-    EventGraph->AddNode(MoveToNode);
-
-    // Connect execution flow
+    // Connect Execution pins
     if (UEdGraphPin* TickThenPin = TickNode->FindPin(UEdGraphSchema_K2::PN_Then))
     {
         if (UEdGraphPin* MoveToExecPin = MoveToNode->FindPin(UEdGraphSchema_K2::PN_Execute))
@@ -234,22 +274,7 @@ void FEditorAutomationManager::ImplementFollowLogic(UBlueprint* Blueprint)
         }
     }
 
-    // Connect target actor
-    if (UEdGraphPin* TargetPin = GetTargetNode->FindPin(TEXT("TargetActor")))
-    {
-        if (UEdGraphPin* GoalPin = MoveToNode->FindPin(TEXT("Goal")))
-        {
-            TargetPin->MakeLinkTo(GoalPin);
-        }
-    }
-
-    // Get controller and connect
-    UK2Node_CallFunction* GetControllerNode = NewObject<UK2Node_CallFunction>(EventGraph);
-    GetControllerNode->FunctionReference.SetExternalMember(TEXT("GetController"), ACharacter::StaticClass());
-    GetControllerNode->NodePosX = GetTargetNode->NodePosX;
-    GetControllerNode->NodePosY = GetTargetNode->NodePosY - 100;
-    EventGraph->AddNode(GetControllerNode);
-
+    // Connect Get Controller to Simple Move To
     if (UEdGraphPin* ControllerPin = GetControllerNode->FindPin(TEXT("ReturnValue")))
     {
         if (UEdGraphPin* MoveToControllerPin = MoveToNode->FindPin(TEXT("Controller")))
@@ -258,6 +283,16 @@ void FEditorAutomationManager::ImplementFollowLogic(UBlueprint* Blueprint)
         }
     }
 
-    // Compile blueprint
+    // Connect TargetActor to Simple Move To Goal
+    if (UEdGraphPin* TargetPin = GetTargetNode->FindPin(TEXT("TargetActor")))
+    {
+        if (UEdGraphPin* GoalPin = MoveToNode->FindPin(TEXT("Goal")))
+        {
+            TargetPin->MakeLinkTo(GoalPin);
+        }
+    }
+
+    // Compile the blueprint
     FKismetEditorUtilities::CompileBlueprint(Blueprint);
+    UE_LOG(LogTemp, Log, TEXT("Follow logic implemented for blueprint: %s"), *Blueprint->GetName());
 }
