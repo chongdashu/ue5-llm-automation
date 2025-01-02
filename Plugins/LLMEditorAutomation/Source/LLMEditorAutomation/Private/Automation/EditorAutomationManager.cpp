@@ -27,22 +27,31 @@ FEditorAutomationManager& FEditorAutomationManager::Get()
 
 void FEditorAutomationManager::ProcessLLMResponse(const FString& Response)
 {
-    // Simple response parsing - in a real implementation, this would be more sophisticated
+    // Check if this is an NPC creation request
     if (Response.Contains(TEXT("follow")) || Response.Contains(TEXT("NPC")) || Response.Contains(TEXT("character")))
     {
-        UBlueprint* CreatedBlueprint = CreateFollowerNPCBlueprint();
+        const FString BlueprintName = TEXT("BP_FollowerNPC");
+        UBlueprint* CreatedBlueprint = CreateFollowerNPCBlueprint(BlueprintName);
+        
         if (CreatedBlueprint)
         {
-            // Place the actor in the world
+            // Place in world at a reasonable position
             UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
             if (EditorWorld)
             {
-                FVector SpawnLocation = FVector(0, 0, 100);  // Slightly above ground
+                FVector SpawnLocation = FVector(0, 0, 100); // Slightly above ground
                 FRotator SpawnRotation = FRotator::ZeroRotator;
                 FActorSpawnParameters SpawnParams;
-                SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+                SpawnParams.SpawnCollisionHandlingOverride = 
+                    ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
                 
-                AActor* SpawnedActor = EditorWorld->SpawnActor(CreatedBlueprint->GeneratedClass, &SpawnLocation, &SpawnRotation, SpawnParams);
+                AActor* SpawnedActor = EditorWorld->SpawnActor(
+                    CreatedBlueprint->GeneratedClass, 
+                    &SpawnLocation, 
+                    &SpawnRotation, 
+                    SpawnParams
+                );
+                
                 if (SpawnedActor)
                 {
                     // Select the newly spawned actor

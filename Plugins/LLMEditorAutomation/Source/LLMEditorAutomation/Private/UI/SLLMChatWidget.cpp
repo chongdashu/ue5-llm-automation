@@ -120,9 +120,16 @@ void SLLMChatWidget::AddMessageToHistory(const FString& Message, bool bIsUser)
 void SLLMChatWidget::OnLLMResponse(const FString& Response)
 {
     AddMessageToHistory(Response, false);
+    ProcessAutomationRequest(Response);
 }
 
 void SLLMChatWidget::OnLLMError(const FString& Error)
 {
     AddMessageToHistory(FString::Printf(TEXT("Error: %s"), *Error), false);
+}
+
+void SLLMChatWidget::ProcessAutomationRequest(const FString& Response)
+{
+    // Forward to automation manager
+    FEditorAutomationManager::Get().ProcessLLMResponse(Response);
 }

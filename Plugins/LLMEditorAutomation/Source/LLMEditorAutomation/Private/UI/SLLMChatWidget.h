@@ -6,6 +6,7 @@
 #include "Widgets/Input/SMultiLineEditableTextBox.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Services/ILLMService.h"
+#include "Automation//EditorAutomationManager.h"
 
 class SLLMChatWidget : public SCompoundWidget
 {
@@ -39,4 +40,6 @@ private:
 	FSlateColor GetUserMessageColor() const { return FLinearColor(0.8f, 0.9f, 1.0f); }
 	FSlateColor GetAIMessageColor() const { return FLinearColor(0.9f, 0.9f, 0.9f); }
 
+	// Automation
+	void ProcessAutomationRequest(const FString& Response);
 };
