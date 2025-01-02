@@ -1,178 +1,67 @@
 ﻿#include "LocalLLMService.h"
-#include "Async/Async.h"
+#include "WebSocketsModule.h"
 
 FLocalLLMService::FLocalLLMService(const FString& InHost, int32 InPort)
     : Host(InHost)
     , Port(InPort)
-    , Thread(nullptr)
-    , Socket(nullptr)
-    , bIsConnected(false)
-    , bShouldRun(false)
 {
 }
 
 FLocalLLMService::~FLocalLLMService()
 {
-    Stop();
-    DisconnectFromServer();
+    if (WebSocket)
+    {
+        WebSocket->Close();
+    }
 }
 
 void FLocalLLMService::Initialize()
 {
-    bShouldRun = true;
-    Thread = FRunnableThread::Create(this, TEXT("LocalLLMService"), 0, TPri_Normal);
-}
-
-bool FLocalLLMService::Init()
-{
-    return true;
-}
-
-uint32 FLocalLLMService::Run()
-{
-    while (bShouldRun)
+    FString ServerURL = FString::Printf(TEXT("ws://%s:%d"), *Host, Port);
+    
+    if (!FModuleManager::Get().IsModuleLoaded("WebSockets"))
     {
-        if (!bIsConnected)
-        {
-            if (ConnectToServer())
-            {
-                bIsConnected = true;
-            }
-            else
-            {
-                // Wait before retrying connection
-                FPlatformProcess::Sleep(1.0f);
-                continue;
-            }
-        }
-
-        // Check for responses
-        FString Response;
-        if (ReceiveData(Response))
-        {
-            // Broadcast response on game thread
-            AsyncTask(ENamedThreads::GameThread, [this, Response]()
-            {
-                OnResponseReceived.Broadcast(Response);
-            });
-        }
-
-        // Small sleep to prevent tight loop
-        FPlatformProcess::Sleep(0.016f);
+        FModuleManager::Get().LoadModule("WebSockets");
     }
 
-    return 0;
-}
+    WebSocket = FWebSocketsModule::Get().CreateWebSocket(ServerURL, TEXT("ws"));
 
-void FLocalLLMService::Stop()
-{
-    bShouldRun = false;
-
-    if (Thread)
-    {
-        Thread->Kill(true);
-        delete Thread;
-        Thread = nullptr;
-    }
-}
-
-void FLocalLLMService::Exit()
-{
-    DisconnectFromServer();
+    WebSocket->OnConnected().AddRaw(this, &FLocalLLMService::OnWebSocketConnected);
+    WebSocket->OnMessage().AddRaw(this, &FLocalLLMService::OnWebSocketMessage);
+    WebSocket->OnClosed().AddRaw(this, &FLocalLLMService::OnWebSocketClosed);
+    WebSocket->OnConnectionError().AddRaw(this, &FLocalLLMService::OnWebSocketError);
+    
+    WebSocket->Connect();
 }
 
 void FLocalLLMService::SendPrompt(const FString& Prompt)
 {
-    if (!bIsConnected)
+    if (!IsReady())
     {
-        OnErrorReceived.Broadcast(TEXT("Not connected to LLM server"));
+        OnErrorReceived.Broadcast(TEXT("WebSocket not connected"));
         return;
     }
 
-    if (!SendData(Prompt))
-    {
-        OnErrorReceived.Broadcast(TEXT("Failed to send prompt to LLM server"));
-    }
+    WebSocket->Send(Prompt);
 }
 
-bool FLocalLLMService::ConnectToServer()
+void FLocalLLMService::OnWebSocketConnected()
 {
-    FScopeLock Lock(&SocketCritical);
-
-    if (Socket)
-    {
-        DisconnectFromServer();
-    }
-
-    ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
-    Socket = SocketSubsystem->CreateSocket(NAME_Stream, TEXT("LocalLLMConnection"), false);
-
-    TSharedRef<FInternetAddr> Addr = SocketSubsystem->CreateInternetAddr();
-    bool bIsValid = false;
-    Addr->SetIp(*Host, bIsValid);
-    if (!bIsValid)
-    {
-        return false;
-    }
-    Addr->SetPort(Port);
-
-    return Socket->Connect(*Addr);
+    UE_LOG(LogTemp, Log, TEXT("LLMService: Connected to server"));
 }
 
-void FLocalLLMService::DisconnectFromServer()
+void FLocalLLMService::OnWebSocketMessage(const FString& Message)
 {
-    FScopeLock Lock(&SocketCritical);
-
-    if (Socket)
-    {
-        Socket->Close();
-        ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM)->DestroySocket(Socket);
-        Socket = nullptr;
-    }
-    bIsConnected = false;
+    OnResponseReceived.Broadcast(Message);
 }
 
-bool FLocalLLMService::SendData(const FString& Data)
+void FLocalLLMService::OnWebSocketClosed(int32 StatusCode, const FString& Reason, bool bWasClean)
 {
-    FScopeLock Lock(&SocketCritical);
-    
-    if (!Socket)
-    {
-        return false;
-    }
-
-    // Convert string to UTF8
-    FTCHARToUTF8 Converter(*Data);
-    int32 BytesSent = 0;
-    return Socket->Send((uint8*)Converter.Get(), Converter.Length(), BytesSent);
+    UE_LOG(LogTemp, Warning, TEXT("LLMService: Connection closed - Status: %d, Reason: %s"), StatusCode, *Reason);
 }
 
-bool FLocalLLMService::ReceiveData(FString& OutData)
+void FLocalLLMService::OnWebSocketError(const FString& Error)
 {
-    FScopeLock Lock(&SocketCritical);
-    
-    if (!Socket)
-    {
-        return false;
-    }
-
-    uint32 Size;
-    if (!Socket->HasPendingData(Size))
-    {
-        return false;
-    }
-
-    TArray<uint8> ReceivedData;
-    ReceivedData.SetNumUninitialized(Size);
-    int32 BytesRead = 0;
-
-    if (Socket->Recv(ReceivedData.GetData(), ReceivedData.Num(), BytesRead))
-    {
-        // Convert received data to string
-        FUTF8ToTCHAR Converter((const ANSICHAR*)ReceivedData.GetData(), BytesRead);
-        OutData = FString(Converter.Length(), Converter.Get());
-        return true;
-    }
-
-    return false;
+    UE_LOG(LogTemp, Error, TEXT("LLMService: Connection error - %s"), *Error);
+    OnErrorReceived.Broadcast(Error);
 }

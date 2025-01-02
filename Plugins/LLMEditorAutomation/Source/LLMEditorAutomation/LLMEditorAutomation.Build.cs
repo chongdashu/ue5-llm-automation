@@ -57,7 +57,8 @@ public class LLMEditorAutomation : ModuleRules
 				"GameplayTasks",
 				"AIModule",
 				"GameplayTags",
-				"AssetTools"
+				"AssetTools",
+				"WebSockets"
 			}
 			);
 		

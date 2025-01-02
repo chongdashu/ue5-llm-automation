@@ -23,6 +23,8 @@ public:
 	{
 		return FModuleManager::LoadModuleChecked<FLLMEditorAutomationModule>("LLMEditorAutomation");
 	}
+
+	TSharedPtr<class ILLMService> GetLLMService() const { return LLMService; }
 	
 private:
 

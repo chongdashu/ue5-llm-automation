@@ -64,6 +64,7 @@ void FEditorAutomationManager::ProcessLLMResponse(const FString& Response)
 
 UBlueprint* FEditorAutomationManager::CreateFollowerNPCBlueprint(const FString& BlueprintName)
 {
+    UE_LOG(LogTemp, Log, TEXT("Creating Blueprint: %s"), *BlueprintName);
     // Create the Blueprint
     UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(
         ACharacter::StaticClass(),
@@ -76,6 +77,7 @@ UBlueprint* FEditorAutomationManager::CreateFollowerNPCBlueprint(const FString& 
 
     if (!Blueprint)
     {
+        UE_LOG(LogTemp, Warning, TEXT("Unable to create create Blueprint: %s"), *BlueprintName);
         return nullptr;
     }
 
@@ -111,39 +113,22 @@ void FEditorAutomationManager::SetupNPCMovementComponent(UBlueprint* Blueprint)
 
 void FEditorAutomationManager::CreateVariables(UBlueprint* Blueprint)
 {
-    if (!Blueprint)
-    {
-        return;
-    }
+    if (!Blueprint) return;
 
-    // Create TargetActor variable
+    // TargetActor variable
     FEdGraphPinType PinType;
     PinType.PinCategory = UEdGraphSchema_K2::PC_Object;
     PinType.PinSubCategoryObject = ACharacter::StaticClass();
 
-    FBlueprintEditorUtils::AddMemberVariable(
-        Blueprint,
-        TEXT("TargetActor"),
-        PinType,
-        TEXT("The actor to follow")
-    );
+    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("TargetActor"), PinType);
 
-    // Create FollowDistance variable
+    // FollowDistance variable with default value
     FEdGraphPinType FloatPinType;
     FloatPinType.PinCategory = UEdGraphSchema_K2::PC_Float;
 
-    // Add variable 
-    FBlueprintEditorUtils::AddMemberVariable(
-        Blueprint,
-        TEXT("FollowDistance"),
-        FloatPinType,
-        TEXT("Distance to maintain from target")
-    );
+    FBlueprintEditorUtils::AddMemberVariable(Blueprint, TEXT("FollowDistance"), FloatPinType);
 
-    // Compile the Blueprint to generate the class
-    FKismetEditorUtilities::CompileBlueprint(Blueprint);
-
-    // Now we can access the generated class and set default values
+    // Set default value for FollowDistance
     if (UClass* GeneratedClass = Blueprint->GeneratedClass)
     {
         if (UObject* DefaultObject = GeneratedClass->GetDefaultObject())
@@ -210,62 +195,69 @@ void FEditorAutomationManager::CreateEventGraph(UBlueprint* Blueprint)
 
 void FEditorAutomationManager::ImplementFollowLogic(UBlueprint* Blueprint)
 {
-    if (!Blueprint)
-    {
-        return;
-    }
+    if (!Blueprint) return;
 
     UEdGraph* EventGraph = FBlueprintEditorUtils::FindEventGraph(Blueprint);
-    if (!EventGraph)
-    {
-        return;
-    }
+    if (!EventGraph) return;
 
-    // Find the Tick event node - Fix third occurrence
-    UK2Node_Event* TickNode = FBlueprintEditorUtils::FindOverrideForFunction(
-        Blueprint,
-        AActor::StaticClass(),  // Changed from UGameplayStatics to AActor
-        FName(TEXT("ReceiveTick"))  // Changed to FName
-    );
-    
+    // Create Tick event
+    UK2Node_Event* TickNode = FBlueprintEditorUtils::FindOverrideForFunction(Blueprint, AActor::StaticClass(), FName(TEXT("ReceiveTick")));
     if (!TickNode)
     {
-        return;
+        TickNode = NewObject<UK2Node_Event>(EventGraph);
+        TickNode->EventReference.SetExternalMember(TEXT("ReceiveTick"), ACharacter::StaticClass());
+        TickNode->NodePosX = 0;
+        TickNode->NodePosY = 200;
+        EventGraph->AddNode(TickNode);
     }
 
-    // Create Get TargetActor node
+    // Get TargetActor variable
     UK2Node_VariableGet* GetTargetNode = NewObject<UK2Node_VariableGet>(EventGraph);
     GetTargetNode->VariableReference.SetSelfMember(TEXT("TargetActor"));
-    GetTargetNode->NodePosX = TickNode->NodePosX + 200;
+    GetTargetNode->NodePosX = TickNode->NodePosX + 250;
     GetTargetNode->NodePosY = TickNode->NodePosY;
     EventGraph->AddNode(GetTargetNode);
 
-    // Create SimpleMoveToActor node
+    // Create AI Move To node
     UK2Node_CallFunction* MoveToNode = NewObject<UK2Node_CallFunction>(EventGraph);
-    MoveToNode->SetFromFunction(UAIBlueprintHelperLibrary::StaticClass()->FindFunctionByName(TEXT("SimpleMoveToActor")));
-    MoveToNode->NodePosX = GetTargetNode->NodePosX + 200;
+    MoveToNode->FunctionReference.SetExternalMember(TEXT("SimpleMoveToActor"), UAIBlueprintHelperLibrary::StaticClass());
+    MoveToNode->NodePosX = GetTargetNode->NodePosX + 250;
     MoveToNode->NodePosY = GetTargetNode->NodePosY;
     EventGraph->AddNode(MoveToNode);
 
-    // Get self reference for the controller owner
+    // Connect execution flow
+    if (UEdGraphPin* TickThenPin = TickNode->FindPin(UEdGraphSchema_K2::PN_Then))
+    {
+        if (UEdGraphPin* MoveToExecPin = MoveToNode->FindPin(UEdGraphSchema_K2::PN_Execute))
+        {
+            TickThenPin->MakeLinkTo(MoveToExecPin);
+        }
+    }
+
+    // Connect target actor
+    if (UEdGraphPin* TargetPin = GetTargetNode->FindPin(TEXT("TargetActor")))
+    {
+        if (UEdGraphPin* GoalPin = MoveToNode->FindPin(TEXT("Goal")))
+        {
+            TargetPin->MakeLinkTo(GoalPin);
+        }
+    }
+
+    // Get controller and connect
     UK2Node_CallFunction* GetControllerNode = NewObject<UK2Node_CallFunction>(EventGraph);
-    GetControllerNode->SetFromFunction(AActor::StaticClass()->FindFunctionByName(TEXT("GetController")));
+    GetControllerNode->FunctionReference.SetExternalMember(TEXT("GetController"), ACharacter::StaticClass());
     GetControllerNode->NodePosX = GetTargetNode->NodePosX;
-    GetControllerNode->NodePosY = GetTargetNode->NodePosY + 100;
+    GetControllerNode->NodePosY = GetTargetNode->NodePosY - 100;
     EventGraph->AddNode(GetControllerNode);
 
-    // Connect the nodes
-    UEdGraphPin* TickThenPin = TickNode->FindPin(UEdGraphSchema_K2::PN_Then);
-    UEdGraphPin* MoveToExecPin = MoveToNode->FindPin(UEdGraphSchema_K2::PN_Execute);
-    TickThenPin->MakeLinkTo(MoveToExecPin);
+    if (UEdGraphPin* ControllerPin = GetControllerNode->FindPin(TEXT("ReturnValue")))
+    {
+        if (UEdGraphPin* MoveToControllerPin = MoveToNode->FindPin(TEXT("Controller")))
+        {
+            ControllerPin->MakeLinkTo(MoveToControllerPin);
+        }
+    }
 
-    // Connect controller
-    UEdGraphPin* ControllerPin = GetControllerNode->FindPin(TEXT("ReturnValue"));
-    UEdGraphPin* MoveToControllerPin = MoveToNode->FindPin(TEXT("Controller"));
-    ControllerPin->MakeLinkTo(MoveToControllerPin);
-
-    // Connect target
-    UEdGraphPin* TargetPin = GetTargetNode->FindPin(TEXT("TargetActor"));
-    UEdGraphPin* MoveToTargetPin = MoveToNode->FindPin(TEXT("Goal"));
-    TargetPin->MakeLinkTo(MoveToTargetPin);
+    // Compile blueprint
+    FKismetEditorUtilities::CompileBlueprint(Blueprint);
 }
