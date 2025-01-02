@@ -14,6 +14,11 @@
 #include "Kismet/GameplayStatics.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "K2Node_VariableSet.h"
+#include "Engine/Blueprint.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
+#include "Components/StaticMeshComponent.h"
+
 
 FEditorAutomationManager* FEditorAutomationManager::Instance = nullptr;
 
@@ -40,7 +45,7 @@ void FEditorAutomationManager::ProcessLLMResponse(const FString& Response)
             UWorld* EditorWorld = GEditor->GetEditorWorldContext().World();
             if (EditorWorld)
             {
-                FVector SpawnLocation = FVector(1640.0f, 1140.0f, 100.0f); // Target position
+                FVector SpawnLocation = FVector(1640.0f, 1140.0f, 250.0f); // Target position
                 FRotator SpawnRotation = FRotator::ZeroRotator;
                 FActorSpawnParameters SpawnParams;
                 SpawnParams.SpawnCollisionHandlingOverride = 
@@ -110,6 +115,48 @@ void FEditorAutomationManager::SetupNPCMovementComponent(UBlueprint* Blueprint)
         MovementComp->bOrientRotationToMovement = true;
         MovementComp->RotationRate = FRotator(0.0f, 540.0f, 0.0f);
     }
+
+    // Add static mesh component for visualization
+    // Get or create the SCS
+    USimpleConstructionScript* SCS = Blueprint->SimpleConstructionScript;
+    if (!SCS)
+    {
+        return;
+    }
+
+    // Create the static mesh component node
+    USCS_Node* MeshNode = SCS->CreateNode(UStaticMeshComponent::StaticClass(), TEXT("VisualMesh"));
+    if (MeshNode)
+    {
+        UStaticMeshComponent* MeshComponent = Cast<UStaticMeshComponent>(MeshNode->ComponentTemplate);
+        if (MeshComponent)
+        {
+            // Load the default cube mesh
+            UStaticMesh* CubeMesh = Cast<UStaticMesh>(StaticLoadObject(
+                UStaticMesh::StaticClass(),
+                nullptr,
+                TEXT("/Engine/BasicShapes/Cube")
+            ));
+
+            if (CubeMesh)
+            {
+                MeshComponent->SetStaticMesh(CubeMesh);
+                MeshComponent->SetRelativeScale3D(FVector(0.5f, 0.5f, 1.0f));
+                MeshComponent->SetRelativeLocation(FVector(0.0f, 0.0f, 0.0f));
+            }
+        }
+
+        // Add to root
+        SCS->AddNode(MeshNode);
+    }
+
+    // Set auto possess AI
+    if (ACharacter* DefaultChar = Cast<ACharacter>(Blueprint->GeneratedClass->GetDefaultObject()))
+    {
+        DefaultChar->AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+    }
+
+    
 
     
 }
@@ -291,6 +338,8 @@ void FEditorAutomationManager::ImplementFollowLogic(UBlueprint* Blueprint)
             TargetPin->MakeLinkTo(GoalPin);
         }
     }
+
+    
 
     // Compile the blueprint
     FKismetEditorUtilities::CompileBlueprint(Blueprint);
