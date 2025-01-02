@@ -43,11 +43,21 @@ public class LLMEditorAutomation : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				// ... add private dependencies that you statically link with here ...	
-				"WorkspaceMenuStructure", 
+				// Editor Support
+				"WorkspaceMenuStructure",
 				"ApplicationCore",
 				"Sockets",
-                "Networking"
+				"Networking",
+				// Blueprint Support
+				"BlueprintGraph",
+				"KismetCompiler",
+				"UnrealEd",
+				"GraphEditor",
+				"NavigationSystem",
+				"GameplayTasks",
+				"AIModule",
+				"GameplayTags",
+				"AssetTools"
 			}
 			);
 		
